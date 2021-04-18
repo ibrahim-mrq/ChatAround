@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#DABA2E</color>
+    <color name="colorPrimaryDark">#DABA2E</color>
+    <color name="colorAccent">#EA6D6D</color>
+
+    <color name="White">#FFFFFF</color>
+    <color name="black">#000000</color>
+
+    <color name="Gray">#A3A0A0</color>
+    <color name="black2">#272727</color>
+
+    <color name="green">#10393F</color>
+
+</resources>

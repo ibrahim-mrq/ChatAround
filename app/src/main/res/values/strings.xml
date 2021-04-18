@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">Chat Tracker</string>
+
+
+    <string name="email_or_username">الايميل</string>
+    <string name="password">كلمة المرور</string>
+    <string name="login">تسجيل دخول</string>
+    <string name="you_don_t_have_account_n_register">انت لا تملك حساب ؟ تسجيل جديد </string>
+    <string name="fist_name">الاسم الاول</string>
+    <string name="last_name">الاسم الاخير </string>
+    <string name="male">ذكر</string>
+    <string name="female">انثى</string>
+    <string name="email">الايميل</string>
+    <string name="mobile">الهاتف</string>
+    <string name="confirm_password">تاكيد كلمة المرور</string>
+    <string name="register">تسجيل جديد</string>
+    <string name="i_have_account_login">انا املك حساب؟ تسجيل دخول</string>
+    <string name="description">التفاصيل</string>
+    <string name="title_activity_maps">Map</string>
+
+
+    <string name="facebook_app_id">591873691675835</string>
+    <string name="fb_login_protocol_scheme">fb591873691675835</string>
+    <string name="phone">رقم الهاتف</string>
+    <string name="gender">الجنس</string>
+    <string name="date_of_birth">تاريخ الميلاد</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+
+</resources>
