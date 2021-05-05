@@ -1,6 +1,7 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'com.google.gms.google-services'
+
 android {
     compileSdkVersion 30
     buildToolsVersion "30.0.3"
@@ -43,7 +44,8 @@ dependencies {
     implementation 'com.firebaseui:firebase-ui-auth:4.3.1'
     implementation 'com.google.firebase:firebase-firestore:22.0.1'
     implementation 'com.google.firebase:firebase-storage:19.2.1'
-//    implementation 'com.google.firebase:firebase-inappmessaging-display'
+    implementation 'com.google.firebase:firebase-messaging'
+    implementation 'com.google.firebase:firebase-messaging-directboot:20.2.0'
 
     // TODO : location
     implementation 'com.google.android.gms:play-services-location:17.0.0'
@@ -60,8 +62,12 @@ dependencies {
     implementation 'com.karumi:dexter:6.2.2'
     // TODO : Privacy-Policy
     implementation 'com.github.khirr:Android-Privacy-Policy:1.0.3'
-    // TODO : crop image
-    implementation 'com.github.yalantis:ucrop:2.2.2'
+    // TODO : volley
+    implementation 'com.android.volley:volley:1.2.0'
+    // TODO : timerx
+    implementation 'com.arsvechkarev:timerx:2.3.2'
+    // TODO : hawk
+    implementation "com.orhanobut:hawk:2.0.1"
 
 }
 

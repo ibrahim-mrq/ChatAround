@@ -19,6 +19,12 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
 import com.chat_tracker.Adapter.ChatAdapter;
 import com.chat_tracker.Model.Chat;
 import com.chat_tracker.R;
@@ -29,9 +35,15 @@ import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.FirebaseFirestoreSettings;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
+import com.google.firebase.messaging.FirebaseMessaging;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ChatActivity extends AppCompatActivity {
 
@@ -51,7 +63,7 @@ public class ChatActivity extends AppCompatActivity {
     private CollectionReference ref;
     private CollectionReference ref2;
     private ChatAdapter adapter;
-
+    private String url = "https://fcm.googleapis.com/fcm/send";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,16 +86,14 @@ public class ChatActivity extends AppCompatActivity {
         if (messages.equals("privateMessages")) {
             ref = db.collection("message");
             if (!tokenTwo.isEmpty()) {
+//                FirebaseMessaging.getInstance().subscribeToTopic(tokenOne);
                 getPrivateData();
             }
         }
         if (messages.equals("directChat")) {
-            Log.d("tokenTwo", tokenTwo + "");
-            Log.d("tokenTwo", tokenOne + "");
-            Log.d("tokenTwo", userSender + "");
             ref2 = db.collection("User").document(tokenTwo).collection("ChatRoom");
         }
-
+        FirebaseMessaging.getInstance().subscribeToTopic(tokenOne);
         getSupportActionBar().setTitle(name + "");
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
@@ -152,6 +162,7 @@ public class ChatActivity extends AppCompatActivity {
                         ref.add(chat);
                     if (messages.equals("directChat"))
                         ref2.add(chat);
+                    sendNotifications(userSender, content, tokenTwo);
                 }
             }
         });
@@ -214,6 +225,44 @@ public class ChatActivity extends AppCompatActivity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    private void sendNotifications(String title, String body, String topic) {
+        RequestQueue queue = Volley.newRequestQueue(this);
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("to", "/topics/" + topic);
+            JSONObject object = new JSONObject();
+            object.put("title", title + "");
+            object.put("body", body + "");
+            jsonObject.put("notification", object);
+//            jsonObject.put("data", object);
+            JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST, url, jsonObject
+                    , new Response.Listener<JSONObject>() {
+                @Override
+                public void onResponse(JSONObject response) {
+                    Log.d("Error", response + "");
+                }
+            }, new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    Log.d("Error", error.getMessage() + "");
+                }
+            }) {
+                @Override
+                public Map<String, String> getHeaders() {
+                    Map<String, String> header = new HashMap<>();
+                    header.put("Content-Type", "application/json");
+                    header.put("Authorization", "key=AAAAmDBGLmc:APA91bHE_8Cb-QfPlYmzqPgyacUAab0CSiO34IO65VVacfYq4FcJFeEd5pqCUcXgjkO4owNvi5Pfl5z7w1hAGpm78crhzBtBq3A6JjF965YxSrl2UjFdWFnymLiXrXpKnbrF7CvYH6MN");
+                    return header;
+                }
+            };
+            queue.add(request);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+
     }
 
 }

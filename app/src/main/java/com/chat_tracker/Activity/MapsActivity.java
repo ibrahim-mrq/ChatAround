@@ -1,7 +1,6 @@
 package com.chat_tracker.Activity;
 
 import androidx.annotation.NonNull;
-import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
@@ -15,19 +14,12 @@ import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
-import android.graphics.RectF;
-import android.graphics.Shader;
-import android.graphics.drawable.Drawable;
-import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Looper;
@@ -62,7 +54,6 @@ import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.maps.model.PointOfInterest;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
@@ -76,13 +67,17 @@ import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
-import com.squareup.picasso.Picasso;
-import com.squareup.picasso.Target;
+import com.orhanobut.hawk.Hawk;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
+
+import timerx.Stopwatch;
+import timerx.StopwatchBuilder;
+import timerx.TimeTickListener;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
@@ -97,8 +92,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private FusedLocationProviderClient fusedLocationProviderClient;
     private ArrayList<User> listUser = new ArrayList<>();
     private ArrayList<String> listId = new ArrayList<>();
-    private TextView textView;
-    private String token;
+    public static TextView textView;
+    public static String token;
     private String name;
     private String img;
     private SharedPreferences sp;
@@ -111,6 +106,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
+        mapFragment.getMapAsync(this);
+
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
+//        geocoder = new Geocoder(this);
+        locationRequest = LocationRequest.create();
+//        locationRequest.setInterval(5000);
+//        locationRequest.setFastestInterval(30000);
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+
         sp = getSharedPreferences("ChatTracker", MODE_PRIVATE);
         spEditor = sp.edit();
         token = sp.getString("token", "token");
@@ -120,6 +125,22 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         button = findViewById(R.id.button2);
         textView = findViewById(R.id.textView2);
         textView.setTextColor(Color.GREEN);
+
+        bottomSheet();
+        getDataUser();
+        getData();
+
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mAuth.signOut();
+                spEditor.clear();
+                spEditor.apply();
+                Hawk.deleteAll();
+                startActivity(new Intent(getApplicationContext(), LoginActivity.class));
+                finish();
+            }
+        });
 
         textView.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -132,34 +153,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 );
             }
         });
-        getDataUser();
-        getData();
 
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mAuth.signOut();
-                spEditor.clear();
-                spEditor.apply();
-                startActivity(new Intent(getApplicationContext(), LoginActivity.class));
-                finish();
-            }
-        });
 
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
-        mapFragment.getMapAsync(this);
-
-        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
-//        geocoder = new Geocoder(this);
-        locationRequest = LocationRequest.create();
-//        locationRequest.setInterval(5000);
-//        locationRequest.setFastestInterval(30000);
-        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-        bottomSheet();
     }
 
-    LocationCallback locationCallback = new LocationCallback() {
+    double max, min;
+    double number = 5000.0;
+    public static LatLng latLng;
+    public static String pointName;
+    private Stopwatch stopwatch;
 
+    LocationCallback locationCallback = new LocationCallback() {
         @Override
         public void onLocationResult(LocationResult locationResult) {
             if (mMap != null) {
@@ -201,24 +205,56 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private void getData() {
         db.collection("User")
-                .orderBy("name")
+                .orderBy("geoPoint")
                 .addSnapshotListener(new EventListener<QuerySnapshot>() {
                     @SuppressLint("MissingPermission")
                     @Override
-                    public void onEvent(@Nullable QuerySnapshot queryDocumentSnapshots, @Nullable final FirebaseFirestoreException e) {
+                    public void onEvent(@Nullable QuerySnapshot queryDocumentSnapshots, @Nullable final FirebaseFirestoreException ffe) {
                         list = new ArrayList<>();
                         if (queryDocumentSnapshots != null && queryDocumentSnapshots.size() > 0 && !listUser.isEmpty()) {
+                            max = min = number;
                             for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
                                 User user = document.toObject(User.class);
                                 user.setType("User");
-                                LatLng a1 = new LatLng(listUser.get(0).getGeoPoint().getLatitude(), listUser.get(0).getGeoPoint().getLongitude());
+                                LatLng a1 = new LatLng(
+                                        listUser.get(0).getGeoPoint().getLatitude(),
+                                        listUser.get(0).getGeoPoint().getLongitude());
                                 LatLng a2 = new LatLng(user.getGeoPoint().getLatitude(), user.getGeoPoint().getLongitude());
                                 if (CalculationByDistance(a1, a2) <= 5 && !user.getToken().equals(token)) {
                                     if (user.getIsOnline()) {
                                         list.add(user);
                                     }
+//                                    number = CalculationByDistance2(
+//                                            new LatLng(a1.latitude, a1.longitude),
+//                                            new LatLng(a2.latitude, a2.longitude));
+                                    number = distance(
+                                            a1.latitude,
+                                            a1.longitude,
+                                            a2.latitude,
+                                            a2.longitude,
+                                            "M");
+
+                                    if (number > max) {
+                                        max = number;
+                                    }
+                                    if (number < min) {
+                                        min = number;
+                                    }
+                                    if (min < 0.200) {
+                                        latLng = new LatLng(a2.latitude, a2.longitude);
+                                        pointName = user.getName();
+                                    } else {
+                                        latLng = null;
+                                        pointName = null;
+                                    }
                                 }
                             }
+
+                            Log.d("numbersMax", max + "");
+                            Log.d("numbersMin", min + "");
+                            Log.d("numbersLatLng", latLng + "");
+                            Log.d("numbersPointName", pointName + "");
+
                             adapter = new UserAdapter(list, MapsActivity.this, new UserInterface() {
                                 @Override
                                 public void privateMessages(User model) {
@@ -256,7 +292,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                         DocumentReference noteRef2 = db.collection("User").document(model.getToken().trim());
                                         noteRef2.update("friends", FieldValue.arrayUnion(token.trim()));
                                         Toast.makeText(MapsActivity.this, " تم الاضافة !", Toast.LENGTH_SHORT).show();
-//                                        getData();
                                     }
                                 }
                             });
@@ -281,45 +316,44 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                         Log.d("getGeoPoint", list.get(i).getGeoPoint() + "");
                                         double lat = list.get(i).getGeoPoint().getLatitude();
                                         double lon = list.get(i).getGeoPoint().getLongitude();
-                                        final LatLng a2 = new LatLng(lat, lon);
-                                        if (CalculationByDistance(a1, a2) <= 5 && !list.get(i).getToken().equals(token)) {
-                                            Target target = new Target() {
-                                                @Override
-                                                public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
-                                                    bitmap1 = bitmap;
-                                                }
-
-                                                @Override
-                                                public void onBitmapFailed(Exception e, Drawable errorDrawable) {
-
-                                                }
-
-                                                @Override
-                                                public void onPrepareLoad(Drawable placeHolderDrawable) {
-
-                                                }
-
-                                            };
-                                            Picasso.get().load(list.get(i).getImage())
-                                                    .resize(60, 60)
-                                                    .centerInside()
-                                                    .into(target);
-                                            try {
+//                                        final LatLng a2 = new LatLng(lat, lon);
+//                                        Target target = new Target() {
+//                                            @Override
+//                                            public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
+//                                                bitmap1 = bitmap;
+//                                            }
+//
+//                                            @Override
+//                                            public void onBitmapFailed(Exception e, Drawable errorDrawable) {
+//
+//                                            }
+//
+//                                            @Override
+//                                            public void onPrepareLoad(Drawable placeHolderDrawable) {
+//
+//                                            }
+//
+//                                        };
+//                                        Picasso.get().load(list.get(i).getImage())
+//                                                .resize(60, 60)
+//                                                .centerInside()
+//                                                .into(target);
+                                        try {
 //                                                Bitmap bitmap = createUserBitmap();
-                                                mMap.addMarker(new MarkerOptions()
-                                                        .icon(BitmapDescriptorFactory.fromBitmap(getCroppedBitmap(bitmap1)))
-//                                                        .icon(BitmapDescriptorFactory.fromResource(R.drawable.user))
-                                                        .position(new LatLng(lat, lon))
-                                                        .snippet("" + list.get(i).getToken())
-                                                        .title("" + list.get(i).getName()));
-                                            } catch (Exception e1) {
-                                                mMap.addMarker(new MarkerOptions()
-                                                        .icon(BitmapDescriptorFactory.fromResource(R.drawable.user))
-                                                        .position(new LatLng(lat, lon))
-                                                        .snippet("" + list.get(i).getToken())
-                                                        .title("" + list.get(i).getName()));
-                                            }
+                                            mMap.addMarker(new MarkerOptions()
+//                                                    .icon(BitmapDescriptorFactory.fromBitmap(getCroppedBitmap(bitmap1)))
+//                                                    .icon(BitmapDescriptorFactory.fromResource(R.drawable.user))
+                                                    .position(new LatLng(lat, lon))
+                                                    .snippet("" + list.get(i).getToken())
+                                                    .title("" + list.get(i).getName()));
+                                        } catch (Exception e1) {
+                                            mMap.addMarker(new MarkerOptions()
+//                                                    .icon(BitmapDescriptorFactory.fromResource(R.drawable.user))
+                                                    .position(new LatLng(lat, lon))
+                                                    .snippet("" + list.get(i).getToken())
+                                                    .title("" + list.get(i).getName()));
                                         }
+
                                         mMap.addMarker(new MarkerOptions()
                                                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))
                                                 .position((a1)).title("" + listUser.get(0).getName()).snippet(" ( Me ) ")
@@ -370,13 +404,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return output;
     }
 
-    public int dp(float value) {
-        if (value == 0) {
-            return 0;
-        }
-        return (int) Math.ceil(getResources().getDisplayMetrics().density * value);
-    }
-
     private void getDataUser() {
         listUser = new ArrayList<>();
         db.collection("User").whereEqualTo("token", token)
@@ -401,17 +428,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-        mMap.setOnPoiClickListener(new GoogleMap.OnPoiClickListener() {
-            @Override
-            public void onPoiClick(PointOfInterest poi) {
-                Toast.makeText(MapsActivity.this, "asd", Toast.LENGTH_SHORT).show();
-                Log.d("PointOfInterest", poi.name + " " + poi.placeId + " " + poi.latLng + " ");
-            }
-        });
+//        mMap.setOnPoiClickListener(new GoogleMap.OnPoiClickListener() {
+//            @Override
+//            public void onPoiClick(PointOfInterest poi) {
+//                Toast.makeText(MapsActivity.this, "" + poi.name, Toast.LENGTH_SHORT).show();
+//                Log.d("PointOfInterest", poi.name + " " + poi.placeId + " " + poi.latLng + " ");
+//            }
+//        });
     }
 
     public double CalculationByDistance(LatLng StartP, LatLng EndP) {
-        int Radius = 5000;//radius of earth in Km
+        int Radius = 5000;  //radius of earth in Km
         double lat1 = StartP.latitude;
         double lat2 = EndP.latitude;
         double lon1 = StartP.longitude;
@@ -434,9 +461,80 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return kmInDec;
     }
 
+    public double CalculationByDistance2(LatLng StartP, LatLng EndP) {
+        int Radius = 5000;  //radius of earth in Km
+        double lat1 = StartP.latitude;
+        double lat2 = EndP.latitude;
+        double lon1 = StartP.longitude;
+        double lon2 = EndP.longitude;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.asin(Math.sqrt(a));
+        double valueResult = Radius * c;
+        double km = valueResult / 1;
+        DecimalFormat newFormat = new DecimalFormat("####");
+        int kmInDec = Integer.valueOf(newFormat.format(km));
+        double meter = valueResult % 1000;
+        int meterInDec = Integer.valueOf(newFormat.format(meter));
+        Log.d("results", "" + valueResult + "   KM  " + kmInDec + " Meter   " + meterInDec + " :Radius :" + Radius * c);
+
+        return Radius * c;
+//        return kmInDec;
+    }
+
+    private double distance(double lat1, double lon1, double lat2, double lon2, String unit) {
+        double theta = lon1 - lon2;
+        double dist = Math.sin(deg2rad(lat1)) * Math.sin(deg2rad(lat2)) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.cos(deg2rad(theta));
+        dist = Math.acos(dist);
+        dist = rad2deg(dist);
+        dist = dist * 60 * 1.1515;
+        if (unit.equals("K")) {
+            dist = dist * 1.609344;
+        } else if (unit.equals("N")) {
+            dist = dist * 0.8684;
+        }
+        return (dist);
+    }
+
+    private double deg2rad(double deg) {
+        return (deg * Math.PI / 180);
+    }
+
+    private double rad2deg(double rad) {
+        return (rad * 180.0 / Math.PI);
+    }
+
     @Override
     protected void onStart() {
         super.onStart();
+//
+//        if (!Hawk.contains("time:h" + Token)) {
+//            Hawk.put("time:h" + Token, 0L);
+//        }
+//        if (!Hawk.contains("time:m" + Token)) {
+//            Hawk.put("time:m" + Token, 0L);
+//        }
+//        if (!Hawk.contains("time:s" + Token)) {
+//            Hawk.put("time:s" + Token, 0L);
+//        }
+//        if (!Hawk.contains("time:location" + Token)) {
+//            Hawk.put("time:location" + Token, latLng);
+//        }
+//        if (!Hawk.contains("time:pointName" + Token)) {
+//            Hawk.put("time:pointName" + Token, pointName);
+//        }
+//        long hh = Hawk.get("time:h" + Token);
+//        long mm = Hawk.get("time:m" + Token);
+//        long ss = Hawk.get("time:s" + Token);
+//        String pointName = Hawk.get("time:pointName" + Token);
+//        LatLng latLng = Hawk.get("time:location" + Token);
+//        Log.d("timessss", hh + ":" + mm + ":" + ss);
+//        Log.d("timessss", latLng + "");
+//        Log.d("timessss", pointName + "");
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED) {
             StartLocationUpdate();
@@ -530,5 +628,51 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onBackPressed();
         finish();
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+//        stopwatch = new StopwatchBuilder()
+//                .startFormat("HH:MM:SS")
+//                .onTick(new TimeTickListener() {
+//                    @Override
+//                    public void onTick(@NonNull CharSequence time) {
+//                        Log.d("timess", "" + time);
+//                    }
+//                })
+//                .build();
+//        stopwatch.start();
+
+
+        Hawk.put("location" + token, latLng);
+        Hawk.put("pointName" + token, pointName);
+        Log.d("pointName", Hawk.get("time:pointName") + "");
+        Log.d("pointName", Hawk.get("time:location") + "");
+    }
+
+
+//    @Override
+//    protected void onPause() {
+//        stopwatch.stop();
+//        long hh = Hawk.get("time:h" + Token);
+//        long ss = Hawk.get("time:s" + Token);
+//        long mm = Hawk.get("time:m" + Token);
+//        long s = stopwatch.getTimeIn(TimeUnit.SECONDS);
+//        long h = stopwatch.getTimeIn(TimeUnit.HOURS);
+//
+//        long hours = (h + hh) / 3600;
+//        long minutes = (((s + ss)) / 60) % 60;
+//        long seconds = (s + ss) % 60;
+//        Hawk.put("time:h" + Token, hours);
+//        Hawk.put("time:m" + Token, minutes + mm);
+//        Hawk.put("time:s" + Token, seconds);
+//        Hawk.put("time:location" + Token, latLng);
+//        Hawk.put("time:pointName" + Token, pointName);
+//        Toast.makeText(this, "" + hours + ":" + minutes + mm + ":" + seconds, Toast.LENGTH_SHORT).show();
+//        Toast.makeText(this, "" + Hawk.get("time:location" + Token), Toast.LENGTH_SHORT).show();
+//        Toast.makeText(this, "" + Hawk.get("time:pointName" + Token), Toast.LENGTH_SHORT).show();
+//        super.onPause();
+//
+//    }
 
 }
